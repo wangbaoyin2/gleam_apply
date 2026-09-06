@@ -2,7 +2,7 @@ import apply
 import gleam/string
 import gleeunit
 
-// 仅在 javascript 运行时执行测试，其它运行时直接跳过
+// Only run these tests on the javascript runtime; skip elsewhere
 fn on_javascript(run: fn() -> a) -> Nil {
   case apply.platform_name() {
     "javascript" -> {
@@ -96,12 +96,12 @@ pub fn apply_missing_path_returns_error_test() {
   })
 }
 
-// ---- 运行时错误 ----
+// ---- runtime errors ----
 pub fn apply_runtime_exception_test() {
   on_javascript(fn() {
     let assert Error(msg) = apply.apply("JSON.parse", #("not json"))
     echo msg
-    // 函数执行中抛出的 JS 异常：带异常类型与调用目标
+    // JS exception thrown while executing: includes the exception type and call target
     assert string.contains(msg, "SyntaxError")
     assert string.contains(msg, "when calling \"JSON.parse/1\"")
   })
@@ -138,7 +138,7 @@ pub fn get_js_obj_bad_path_test() {
 
 pub fn get_js_obj_single_part_test() {
   on_javascript(fn() {
-    // 单段路径直接解析到 globalThis（对应 erlang 侧省略模块前缀）
+    // A single-segment path resolves directly on globalThis (mirrors the bare-name case on Erlang)
     let assert Ok(_) = apply.get_js_obj("console")
   })
 }
@@ -172,7 +172,7 @@ pub fn get_js_obj_missing_middle_part_test() {
   })
 }
 
-// ---- get_erl_func (JS 运行时总是返回错误) ----
+// ---- get_erl_func (always an error on the JS runtime) ----
 pub fn get_erl_func_needs_erlang_runtime_test() {
   on_javascript(fn() {
     let assert Error(msg) = apply.get_erl_func("erlang:apply", 3)

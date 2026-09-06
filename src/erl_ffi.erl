@@ -14,7 +14,7 @@ platform_name() ->
     ~"erlang".
 
 %% ============================================================================
-%% 解析 "Module:Function" 路径 -> {ok, {M, F}} | {error, Reason}
+%% Resolve a "Module:Function" path -> {ok, {M, F}} | {error, Reason}
 %% ============================================================================
 do_get(Raw) ->
     try
@@ -33,7 +33,7 @@ do_get(Raw) ->
     end.
 
 %% ============================================================================
-%% get/2 — 按 arity 校验并返回函数引用
+%% get/2 - check the export for the given arity and return a fun reference
 %% ============================================================================
 get(Raw, Arity) ->
     case do_get(Raw) of
@@ -49,7 +49,7 @@ get(Raw, Arity) ->
     end.
 
 %% ============================================================================
-%% try_apply/2 — 动态调用；错误信息带实际 arity（= 参数个数）
+%% try_apply/2 - dynamic call; errors carry the actual arity (number of args)
 %% ============================================================================
 try_apply(Raw, Args) when is_tuple(Args) ->
     try
@@ -73,21 +73,22 @@ try_apply(_Raw, _Args) ->
     {error, <<"args must be a tuple">>}.
 
 %% ============================================================================
-%% 错误信息格式化
+%% Error message formatting
 %% ============================================================================
 
-%% "Module:Function/Arity" 标签，数字用 integer_to_binary/1 拼进二进制
+%% "Module:Function/Arity" label; the number is joined into the binary
+%% with integer_to_binary/1
 label(Raw, Arity) ->
     <<Raw/binary, "/", (integer_to_binary(Arity))/binary>>.
 
-%% do_get 阶段错误
+%% do_get stage errors
 resolve_error(Raw, _Arity, bad_path) ->
     <<"bad path: \"", Raw/binary, "\", expected \"Module:Function\"">>;
 resolve_error(Raw, Arity, not_found) ->
     <<(label(Raw, Arity))/binary,
       " not found in erlang (module or function does not exist)">>.
 
-%% 函数在指定 arity 未导出：顺带列出已存在的 arity
+%% Function not exported at the given arity: also list the existing arities
 not_exported_error(Raw, M, F, Arity) ->
     case exported_arities(M, F) of
         [] ->
@@ -102,14 +103,14 @@ not_exported_error(Raw, M, F, Arity) ->
               Existing/binary, ")">>
     end.
 
-%% apply 阶段异常：class: reason when calling "M:F/Arity"
+%% apply stage exceptions: class: reason when calling "M:F/Arity"
 apply_error(Raw, Arity, Class, Reason) ->
     C = atom_to_binary(Class, utf8),
     R = fmt_term(Reason),
     <<C/binary, ": ", R/binary, " when calling \"",
       (label(Raw, Arity))/binary, "\"">>.
 
-%% 把异常 reason 转成可读二进制（reason 不一定是原子）
+%% Turn an exception reason into a readable binary (not always an atom)
 fmt_term(Term) when is_atom(Term) ->
     atom_to_binary(Term, utf8);
 fmt_term(Term) when is_binary(Term) ->
@@ -117,7 +118,7 @@ fmt_term(Term) when is_binary(Term) ->
 fmt_term(Term) ->
     unicode:characters_to_binary(io_lib:format("~0p", [Term])).
 
-%% 模块 M 中函数 F 已导出的 arity（升序）
+%% Exported arities of function F in module M (ascending)
 exported_arities(M, F) ->
     case erlang:module_loaded(M) of
         true ->

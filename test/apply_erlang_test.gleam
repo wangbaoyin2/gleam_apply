@@ -1,7 +1,7 @@
 import apply
 import gleeunit
 
-// 仅在 erlang 运行时执行测试，其它运行时直接跳过
+// Only run these tests on the erlang runtime; skip elsewhere
 fn on_erlang(run: fn() -> a) -> Nil {
   case apply.platform_name() {
     "erlang" -> {
@@ -23,7 +23,7 @@ pub fn platform_name_is_erlang_test() {
   })
 }
 
-// ---- is_tuple / is_function（erlang FFI 均为真实 BIF）----
+// ---- is_tuple / is_function (real BIFs on the erlang FFI) ----
 pub fn is_tuple_true_for_tuples_test() {
   on_erlang(fn() {
     assert apply.is_tuple(#(1, 2))
@@ -81,7 +81,7 @@ pub fn get_erl_func_missing_function_atom_test() {
   })
 }
 
-// ---- apply（成功路径）----
+// ---- apply (success paths) ----
 pub fn apply_erlang_length_test() {
   on_erlang(fn() {
     let assert Ok(3) = apply.apply("erlang:length", #([1, 2, 3]))
@@ -108,12 +108,12 @@ pub fn apply_erlang_integer_to_binary_test() {
 
 pub fn apply_ok_result_maps_to_nil_test() {
   on_erlang(fn() {
-    // io:format/2 返回 ok，try_apply 应映射为 Ok(Nil)
+    // io:format/2 returns ok; try_apply should map it to Ok(Nil)
     let assert Ok(Nil) = apply.apply("io:format", #("", []))
   })
 }
 
-// ---- apply（运行时错误，与 JS 侧对称）----
+// ---- apply (runtime errors, mirroring the JS side) ----
 pub fn apply_non_tuple_args_error_test() {
   on_erlang(fn() {
     let assert Error(msg) = apply.apply("erlang:length", "oops")
@@ -178,7 +178,7 @@ pub fn apply_runtime_badarg_test() {
   })
 }
 
-// ---- get_js_obj（erlang 运行时恒返回错误）----
+// ---- get_js_obj (always an error on the erlang runtime) ----
 pub fn get_js_obj_needs_javascript_runtime_test() {
   on_erlang(fn() {
     let assert Error(msg) = apply.get_js_obj("Math.max")

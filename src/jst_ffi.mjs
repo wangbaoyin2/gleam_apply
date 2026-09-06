@@ -12,8 +12,8 @@ export function confirm_function(f) {
   return typeof f === "function";
 }
 
-// 解析 "a.b.c" 路径 -> [target, name]
-// 格式非法抛 bad_path；中间段缺失抛 not_found
+// Resolve a "a.b.c" path -> [target, name]
+// Throws "bad_path" for invalid formats, "not_found" when a middle segment is missing.
 function resolve(path) {
   const parts = path.split(".");
   if (path === "" || parts.some((segment) => segment === "")) {
@@ -29,9 +29,9 @@ function resolve(path) {
   return [target, parts[parts.length - 1]];
 }
 
-// ---- 与 erlang 侧统一的错误信息格式 ----
+// ---- Error message format, unified with the Erlang side ----
 
-// "path/Arity" 标签（数字拼进信息，对应 erlang 的 label/2）
+// "path/Arity" label (the number is joined into the message, mirrors Erlang's label/2)
 function label(path, arity) {
   return `${path}/${arity}`;
 }
@@ -40,7 +40,7 @@ function badPathError(path) {
   return `bad path: "${path}", expected "object.property"`;
 }
 
-// 对象/属性不存在；get 不需要 arity，try_apply 需要（带实际参数个数）
+// Object/property not found; get does not carry arity, try_apply does (real arg count)
 function notFoundError(path, arity) {
   const who = arity === undefined ? path : label(path, arity);
   return `${who} not found in javascript (object or property does not exist)`;
@@ -50,7 +50,7 @@ function applyError(path, arity, className, reason) {
   return `${className}: ${reason} when calling "${label(path, arity)}"`;
 }
 
-// get/2 —— 只负责取运行时对象/函数，不校验 arity
+// get/2 - fetch a runtime object/function only, no arity checking
 export function get(path) {
   try {
     const [target, name] = resolve(path);
@@ -72,10 +72,12 @@ export function try_apply(path, args) {
     const [target, name] = resolve(path);
     const fn = target?.[name];
     if (fn == null) {
+      // Mirrors Erlang's not_found
       return Result$Error(notFoundError(path, arity));
     }
     if (typeof fn !== "function") {
-      // 属性存在但不是函数：明确提示（比 erlang 的 undef 更直白）
+      // The property exists but is not callable: be explicit
+      // (the Erlang side reports `undef` here)
       return Result$Error(
         `error: not a function when calling "${label(path, arity)}"`,
       );
@@ -89,7 +91,7 @@ export function try_apply(path, args) {
     if (error.message === "not_found") {
       return Result$Error(notFoundError(path, arity));
     }
-    // 函数执行中抛出的 JS 异常，格式对应 erlang 的 apply_error
+    // Exception thrown while executing the function, mirrors Erlang's apply_error
     return Result$Error(applyError(path, arity, error.name, error.message));
   }
 }
