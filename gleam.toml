@@ -10,8 +10,7 @@ links = [{ title = "Website", href = "https://hexdocs.pm/apply/" }]
 # Target used for local development only. The library supports both targets;
 # consumers may build with either one.
 # Switch to "erlang" and run `gleam clean` to develop against the Erlang runtime.
-target = "javascript"
-# target="erlang"
+
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 

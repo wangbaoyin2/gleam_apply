@@ -18,15 +18,18 @@ pub fn main() {
 
 Resolve a path like `"erlang:length"` or `"Math.max"`, apply your arguments,
 and get a `Result(any, String)` back - with unified, arity-aware error messages
-on both targets.
+on both runtimes.
 
-## Dual-target design
+
+## How it works
 
 | | Erlang | JavaScript |
 | --- | --- | --- |
 | FFI implementation | `src/erl_ffi.erl` | `src/jst_ffi.mjs` |
 | Path format | `"Module:Function"`, e.g. `"erlang:length"` | `"object.property"`, e.g. `"Math.max"` |
-| Target | `target = "erlang"` in `gleam.toml` | `target = "javascript"` in `gleam.toml` |
+
+The runtime is decided by your project's target in `gleam.toml`, not by this
+library - the path format simply follows that runtime.
 
 ## Installation
 
@@ -39,41 +42,53 @@ gleam add apply@1
 | Function | Description |
 | --- | --- |
 | `apply/2` | Main entry point: dynamically invoke a runtime function (args must be a tuple) |
-| `get_erl_func/2` | Fetch an Erlang function reference, export checked against arity (Erlang only) |
-| `get_js_obj/1` | Fetch a JavaScript global object / function (JavaScript only) |
+| `get_erl_func/2` | Fetch an Erlang function reference, export checked against arity |
+| `get_js_obj/1` | Fetch a JavaScript global object / function |
 | `call_erl/2`, `call_js/1` | Quick-check helpers that crash on failure; prefer `apply` in real code |
 | `platform_name/0` | Current runtime: `"erlang"` / `"javascript"` |
 | `is_tuple/1`, `is_function/1` | Runtime value checks |
-| `do_get/2` | Low-level access, usually not used directly |
+
+> `get_erl_func` / `get_js_obj` are **runtime-specific**: calling them on the
+> other runtime returns a runtime error (see below). `apply` itself works on
+> both runtimes.
 
 ## Usage
 
-### Dynamic invocation (`apply/2`)
+The path format follows the runtime your project targets:
 
-`raw_path` is `"Module:Function"` on Erlang and `"object.property"` on
-JavaScript; `args` must be a tuple whose elements are spread as call arguments
-in order.
+- **Erlang target** - `"Module:Function"`, e.g. `"erlang:length"`
+- **JavaScript target** - `"object.property"`, e.g. `"Math.max"`
+
+`args` must be a tuple; its elements are spread as call arguments in order.
+
+### Erlang
 
 ```gleam
 import apply
 
 pub fn main() {
-  // ---- Erlang target ----
   let assert Ok(3) = apply.apply("erlang:length", #([1, 2, 3]))
   let assert Ok(10) = apply.apply("erlang:max", #(10, 2))
   let assert Ok("123") = apply.apply("erlang:integer_to_binary", #(123))
 
-  // ---- JavaScript target ----
-  let assert Ok(5) = apply.apply("Math.max", #(1, 5))
-  let assert Ok("123") = apply.apply("JSON.stringify", #(123))
-
-  // Non-tuple arguments return an error (same on both targets)
+  // Non-tuple arguments return an error
   let assert Error(_) = apply.apply("erlang:length", "not a tuple")
 }
 ```
 
-> Note: the Erlang examples need `target = "erlang"` and the JavaScript
-> examples need `target = "javascript"`.
+### JavaScript
+
+```gleam
+import apply
+
+pub fn main() {
+  let assert Ok(5) = apply.apply("Math.max", #(1, 5))
+  let assert Ok("123") = apply.apply("JSON.stringify", #(123))
+
+  // A path that does not exist on this runtime returns an error
+  let assert Error(_) = apply.apply("erlang:length", #([1, 2, 3]))
+}
+```
 
 ### Return value handling
 
@@ -90,13 +105,13 @@ pub fn main() {
 ### Fetching objects / function references
 
 ```gleam
-// Erlang target only: export checked against arity; errors list existing arities
+// Erlang runtime: export checked against arity; errors list existing arities
 let assert Ok(f) = apply.get_erl_func("lists:map", 2)
 
 let assert Error(msg) = apply.get_erl_func("lists:map", 3)
 // msg == "lists:map/3 is not exported in erlang (existing arities: 2)"
 
-// JavaScript target only: resolve a dotted path on globalThis (no arity check)
+// JavaScript runtime: resolve a dotted path on globalThis (no arity check)
 let assert Ok(_) = apply.get_js_obj("Math.max")
 let assert Ok(3.141592653589793) = apply.get_js_obj("Math.PI")
 ```
@@ -111,7 +126,7 @@ apply.is_function(fn() { 1 })  // True
 
 ## Error message format
 
-Both targets share a `class: reason when calling "path/arity"` style:
+Both runtimes share a `class: reason when calling "path/arity"` style:
 
 | Scenario | erlang | javascript |
 | --- | --- | --- |
@@ -122,7 +137,7 @@ Both targets share a `class: reason when calling "path/arity"` style:
 | Exception while executing | `error: badarg when calling "erlang:length/1"` | `SyntaxError: ... when calling "JSON.parse/1"` |
 | Explicit throw / exit | `throw: oops when calling "erlang:throw/1"`, `exit: bye when calling "erlang:exit/1"` | - |
 | Non-tuple arguments | `args "oops" must be tuple type` | same as left |
-| Wrong runtime | `need javascript runtime, now is erlang runtime` | `need erlang runtime, now is javascript runtime` |
+| Runtime-specific function on the wrong runtime | `need javascript runtime, now is erlang runtime` | `need erlang runtime, now is javascript runtime` |
 
 Notes:
 
@@ -132,7 +147,7 @@ Notes:
 - Erlang exception reasons are not limited to atoms (`throw`/`exit` can carry
   any term) and are formatted in a readable way.
 
-## Development
+## Development (maintaining this library)
 
 ```sh
 gleam run   # Run the project
@@ -144,7 +159,8 @@ Both test files can stay enabled - tests skip themselves based on the runtime:
 - `test/apply_test.gleam` (22 tests) - runs only on the javascript target
 - `test/apply_erlang_test.gleam` (24 tests) - runs only on the erlang target
 
-To switch targets, edit `gleam.toml` and run `gleam clean`:
+To develop against the other runtime, edit `gleam.toml` and run `gleam test`.
+**Consumers never need to do this** - it only affects this library's own tests:
 
 ```toml
 # target = "erlang"
