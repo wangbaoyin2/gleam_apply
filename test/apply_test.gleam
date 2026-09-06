@@ -100,7 +100,7 @@ pub fn apply_missing_path_returns_error_test() {
 pub fn apply_runtime_exception_test() {
   on_javascript(fn() {
     let assert Error(msg) = apply.apply("JSON.parse", #("not json"))
-    echo msg
+    //echo msg
     // JS exception thrown while executing: includes the exception type and call target
     assert string.contains(msg, "SyntaxError")
     assert string.contains(msg, "when calling \"JSON.parse/1\"")

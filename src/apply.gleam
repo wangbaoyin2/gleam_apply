@@ -3,6 +3,7 @@
 //// Resolve functions by string path in the target runtime and call them,
 //// returning `Result(any, String)`. Error messages share a unified
 //// `path/arity + reason` style on both targets.
+
 ///
 import gleam/bool
 import gleam/list
@@ -109,15 +110,5 @@ pub fn call_erl(raw: String, arity: Int) {
 
 /// Demo entry point.
 pub fn main() {
-  echo is_tuple(#(1, 3, 4))
-  // echo get_erl("erlang:apply", 3)
-  // echo get_erl("erlang:atom", 2)
-  // echo get_erl("atom", 1)
-  echo get_js_obj("console.log.sdf")
-  echo get_js_obj("console.sdf.sdf")
-  // calljs("console.lo")(123, 436)
-  echo string.split("atom", ":") |> list.length
-
-  // echo call_erl("binary_to_atom", 1)("hello")
-  echo apply("console.log", #(123, 434))
+  1
 }
