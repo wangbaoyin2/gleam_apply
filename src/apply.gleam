@@ -33,7 +33,7 @@ pub fn is_function(func: function) -> Bool
 /// is only resolved and arity is ignored. Prefer `get_erl_func` / `get_js_obj`.
 @external(erlang, "erl_ffi", "get")
 @external(javascript, "./jst_ffi.mjs", "get")
-pub fn do_get(raw_script: String, erl_arity: Int) -> Result(any, String)
+fn do_get(raw_script: String, erl_arity: Int) -> Result(any, String)
 
 /// Internal: invoke a function by path (arguments must be a tuple).
 @external(erlang, "erl_ffi", "try_apply")
@@ -64,7 +64,9 @@ pub fn apply(raw_path: String, args: args_tuple) -> Result(any, String) {
 /// Accepts `"Module:Function"`, or a bare function name which is prefixed
 /// with `erlang:`. Returns `Ok(fun)` on success; always returns a runtime
 /// error on the JavaScript target.
-///
+///```
+/// let assert Ok(map) = apply.get_erl_func("lists:map", 2)
+/// ```
 /// Errors include the arity, e.g.
 /// `"erlang:length/2 is not exported in erlang (existing arities: 1)"`.
 pub fn get_erl_func(raw_path: String, erl_arity: Int) {
@@ -82,6 +84,10 @@ pub fn get_erl_func(raw_path: String, erl_arity: Int) {
 /// Fetch a JavaScript runtime object or function (JavaScript target only).
 ///
 /// Takes a dotted path such as `"Math.PI"` or `"console.log"`.
+/// ```
+/// let assert Ok(3.141592653589793) = apply.get_js_obj("Math.PI")
+/// let assert Ok(max) = apply.get_js_obj("Math.max")
+/// ```
 /// Always returns a runtime error on the Erlang target.
 pub fn get_js_obj(raw_script: String) -> Result(any, String) {
   use <- bool.lazy_guard(platform_name() == "javascript", fn() {
