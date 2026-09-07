@@ -74,6 +74,14 @@ export function unwrap(value, default_) {
   return sameType(value, default_) ? value : default_;
 }
 
+// unwrap_not/2: value !== errorValue -> Ok(value), value === errorValue -> Error(errorValue)
+export function unwrap_not(value, errorValue) {
+  if (value === errorValue) {
+    return Result$Error(errorValue);
+  }
+  return Result$Ok(value);
+}
+
 function renderValue(v) {
   if (v === undefined) return "undefined";
   if (v === null) return "null";
@@ -137,4 +145,39 @@ export function try_apply(path, args, default_) {
 
 function typeMismatchError(path, arity, value, default_) {
   return `${label(path, arity)} returned ${renderValue(value)} (type ${kind(value)}), expected type ${kind(default_)}`;
+}
+
+// try_apply_guard/3: treat a specific value as failure.
+// result === errorValue -> Error(guard message), otherwise Ok(result).
+export function try_apply_guard(path, args, errorValue) {
+  const arity = args.length;
+  try {
+    const [target, name] = resolve(path);
+    const fn = target?.[name];
+    if (fn == null) {
+      return Result$Error(notFoundError(path, arity));
+    }
+    if (typeof fn !== "function") {
+      return Result$Error(
+        `error: not a function when calling "${label(path, arity)}"`,
+      );
+    }
+    const content = fn.apply(target, args);
+    if (content === errorValue) {
+      return Result$Error(guardError(path, arity, content));
+    }
+    return Result$Ok(content);
+  } catch (error) {
+    if (error.message === "bad_path") {
+      return Result$Error(badPathError(path));
+    }
+    if (error.message === "not_found") {
+      return Result$Error(notFoundError(path, arity));
+    }
+    return Result$Error(applyError(path, arity, error.name, error.message));
+  }
+}
+
+function guardError(path, arity, value) {
+  return `${label(path, arity)} returned ${renderValue(value)} (guard error value)`;
 }

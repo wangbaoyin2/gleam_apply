@@ -4,10 +4,12 @@
     wait_msg/2,
     wait_msg_forever/1,
     try_apply/3,
+    try_apply_guard/3,
     confirm_tuple/1,
     confirm_function/1,
     get/2,
     unwrap/2,
+    unwrap_not/2,
     platform_name/0
 ]).
 
@@ -77,8 +79,8 @@ try_apply(Raw, Args, Default) when is_tuple(Args) ->
 try_apply(_Raw, _Args, _Default) ->
     {error, <<"args must be a tuple">>}.
 
-%% Type-check the call result against Default:
-%% same type -> {ok, Value}; different -> {error, mismatch message}
+%% Type-check the call result against Default (strict):
+%% same type -> {ok, Value}; different -> {error, mismatch message}.
 check_or_error(Raw, Arity, Value, Default) ->
     case gleam_type(Value) =:= gleam_type(Default) of
         true  -> {ok, Value};
@@ -93,6 +95,46 @@ type_mismatch_error(Raw, Arity, Value, Default) ->
       " (type ", VT/binary, "), expected type ", DT/binary>>.
 
 %% ============================================================================
+%% try_apply_guard/3 - dynamic call treating a specific value as failure:
+%% result =:= ErrorValue -> {error, guard message}, otherwise {ok, Value}.
+%% ============================================================================
+try_apply_guard(Raw, Args, ErrorValue) when is_tuple(Args) ->
+    try
+        Arity = tuple_size(Args),
+        case do_get(Raw) of
+            {ok, {M, F}} ->
+                case apply(M, F, tuple_to_list(Args)) of
+                    ok         -> check_guard(Raw, Arity, nil, ErrorValue);
+                    {ok, Any}  -> check_guard(Raw, Arity, Any, ErrorValue);
+                    {error, E} -> check_guard(Raw, Arity, {error, E}, ErrorValue);
+                    false      -> check_guard(Raw, Arity, false, ErrorValue);
+                    nil        -> check_guard(Raw, Arity, nil, ErrorValue);
+                    Other      -> check_guard(Raw, Arity, Other, ErrorValue)
+                end;
+            {error, ErrReason} ->
+                {error, resolve_error(Raw, Arity, ErrReason)}
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            _ = Stacktrace,
+            {error, apply_error(Raw, tuple_size(Args), Class, Reason)}
+    end;
+try_apply_guard(_Raw, _Args, _ErrorValue) ->
+    {error, <<"args must be a tuple">>}.
+
+%% Guard check: Value =:= ErrorValue -> {error, ...}, otherwise {ok, Value}
+check_guard(Raw, Arity, Value, ErrorValue) ->
+    case Value =:= ErrorValue of
+        true  -> {error, guard_error(Raw, Arity, Value)};
+        false -> {ok, Value}
+    end.
+
+guard_error(Raw, Arity, Value) ->
+    V = fmt_term(Value),
+    <<(label(Raw, Arity))/binary, " returned ", V/binary,
+      " (guard error value)">>.
+
+%% ============================================================================
 %% unwrap/2 - if Value has the same runtime type as Default, return Value,
 %% otherwise return Default. Pins a dynamic value to the type of Default.
 %% ============================================================================
@@ -100,6 +142,16 @@ unwrap(Value, Default) ->
     case gleam_type(Value) =:= gleam_type(Default) of
         true  -> Value;
         false -> Default
+    end.
+
+%% ============================================================================
+%% unwrap_not/2 - value-level apply_guard:
+%% Value =/= ErrorValue -> {ok, Value}; Value =:= ErrorValue -> {error, ErrorValue}
+%% ============================================================================
+unwrap_not(Value, ErrorValue) ->
+    case Value =:= ErrorValue of
+        true  -> {error, ErrorValue};
+        false -> {ok, Value}
     end.
 
 %% Normalised Gleam-level type tag (mirrored by kind/1 in jst_ffi.mjs).
