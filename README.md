@@ -12,10 +12,10 @@ import apply
 
 pub fn main() {
   // Erlang target
-  let assert Ok(3) = apply.apply_typed("erlang:length", #([1, 2, 3]), 0)
+  let assert Ok(3) = apply.guard_type("erlang:length", #([1, 2, 3]), 0)
 
   // JavaScript target
-  let assert Ok(5) = apply.apply_typed("Math.max", #(1, 5), 0)
+  let assert Ok(5) = apply.guard_type("Math.max", #(1, 5), 0)
 }
 ```
 
@@ -37,55 +37,55 @@ string, a tuple of arguments, and an anchor value; you get a typed
 ## Installation
 
 ```sh
-gleam add apply@1
+gleam add apply
 ```
 
 ## Examples
 
-### Strict type calls — `apply_typed`
+### Strict type calls — `guard_type`
 
-`apply_typed(path, args, default)` — the result must have the same runtime
+`guard_type(path, args, default)` — the result must have the same runtime
 type as `default`, otherwise you get an `Error`.
 
 ```gleam
-let assert Ok(3) = apply.apply_typed("erlang:length", #([1, 2, 3]), 0)
-let assert Ok(10) = apply.apply_typed("erlang:max", #(10, 2), 0)
-let assert Ok("123") = apply.apply_typed("erlang:integer_to_binary", #(123), "")
-let assert Ok(5) = apply.apply_typed("Math.max", #(1, 5), 0)
+let assert Ok(3) = apply.guard_type("erlang:length", #([1, 2, 3]), 0)
+let assert Ok(10) = apply.guard_type("erlang:max", #(10, 2), 0)
+let assert Ok("123") = apply.guard_type("erlang:integer_to_binary", #(123), "")
+let assert Ok(5) = apply.guard_type("Math.max", #(1, 5), 0)
 
 // Type mismatch → Error (the message shows both types)
-let assert Error(msg) = apply.apply_typed("erlang:is_atom", #(1), 0)
+let assert Error(msg) = apply.guard_type("erlang:is_atom", #(1), 0)
 // msg == "erlang:is_atom/1 returned false (type boolean), expected type int"
 
-let assert Error(msg) = apply.apply_typed("erlang:max", #(1.5, 2.5), 0)
+let assert Error(msg) = apply.guard_type("erlang:max", #(1.5, 2.5), 0)
 // msg == "erlang:max/2 returned 2.5 (type float), expected type int"
 
 // Call-level failures → Error
-let assert Error(_) = apply.apply_typed("erlang:length", #(), 0)  // undef
-let assert Error(_) = apply.apply_typed("Math.PI", #(1), 0)       // not a function
-let assert Error(_) = apply.apply_typed("Math.max", "oops", 0)    // args not a tuple
+let assert Error(_) = apply.guard_type("erlang:length", #(), 0)  // undef
+let assert Error(_) = apply.guard_type("Math.PI", #(1), 0)       // not a function
+let assert Error(_) = apply.guard_type("Math.max", "oops", 0)    // args not a tuple
 ```
 
-### Failure-value calls — `apply_guard`
+### Failure-value calls — `guard_not`
 
-`apply_guard(path, args, error_value)` — the result is a failure when it
+`guard_not(path, args, error_value)` — the result is a failure when it
 **equals** `error_value`; anything else comes back as `Ok(any)`. Use it when
 you know which value the function uses to signal failure.
 
 ```gleam
 // is_atom uses false for "not an atom"
-let assert Error(msg) = apply.apply_guard("erlang:is_atom", #(1), False)
+let assert Error(msg) = apply.guard_not("erlang:is_atom", #(1), False)
 // msg == "erlang:is_atom/1 returned false (guard error value)"
 
-let assert Ok(False) = apply.apply_guard("erlang:is_atom", #(1), 0)  // false ≠ 0
-let assert Ok(5) = apply.apply_guard("Math.max", #(1, 5), Nil)       // 5 ≠ nil
+let assert Ok(False) = apply.guard_not("erlang:is_atom", #(1), 0)  // false ≠ 0
+let assert Ok(5) = apply.guard_not("Math.max", #(1, 5), Nil)       // 5 ≠ nil
 
 // console.log returns undefined (the JS failure sentinel)
-let assert Error(msg) = apply.apply_guard("console.log", #(1), Nil)
+let assert Error(msg) = apply.guard_not("console.log", #(1), Nil)
 // msg == "console.log/1 returned undefined (guard error value)"
 ```
 
-### Platform-local types — `apply_guard` + `Nil`
+### Platform-local types — `guard_not` + `Nil`
 
 Fetch values Gleam cannot express: Erlang references/atoms, JavaScript
 objects. Any result that is not `nil`/`undefined` comes back as `Ok(any)`;
@@ -93,12 +93,12 @@ treat it as an **opaque handle** and feed it back into the runtime.
 
 ```gleam
 // Erlang: make_ref returns a reference
-let assert Ok(ref) = apply.apply_guard("erlang:make_ref", #(), Nil)
-let assert Ok(True) = apply.apply_typed("erlang:is_reference", #(ref), False)
+let assert Ok(ref) = apply.guard_not("erlang:make_ref", #(), Nil)
+let assert Ok(True) = apply.guard_type("erlang:is_reference", #(ref), False)
 
 // JavaScript: JSON.parse returns a plain JS object
-let assert Ok(obj) = apply.apply_guard("JSON.parse", #("{\"a\":1}"), Nil)
-let assert Ok("{\"a\":1}") = apply.apply_typed("JSON.stringify", #(obj), "")
+let assert Ok(obj) = apply.guard_not("JSON.parse", #("{\"a\":1}"), Nil)
+let assert Ok("{\"a\":1}") = apply.guard_type("JSON.stringify", #(obj), "")
 ```
 
 ### Values you already hold — `unwrap` / `unwrap_not`
@@ -145,8 +145,8 @@ apply.is_function(fn() { 1 })  // True
 
 | Function | Anchor | Returns | Use when |
 | --- | --- | --- | --- |
-| `apply_typed(path, args, default)` | type | `Result(a, String)` | call by path and require the result type to match `default` |
-| `apply_guard(path, args, error_value)` | value | `Result(any, String)` | call by path; a result equal to `error_value` is a failure |
+| `guard_type(path, args, default)` | type | `Result(a, String)` | call by path and require the result type to match `default` |
+| `guard_not(path, args, error_value)` | value | `Result(any, String)` | call by path; a result equal to `error_value` is a failure |
 | `unwrap(value, default)` | type | `a` | settle a value in hand: same type → value, else `default` |
 | `unwrap_not(value, error_value)` | value | `Result(any, a)` | settle a value in hand: equals `error_value` → `Error` |
 | `get_erl_func(path, arity)` | - | `Result(any, String)` | fetch an Erlang function reference |
@@ -178,8 +178,8 @@ Both runtimes share a `path/arity + reason` style:
 | Target not callable | `error: undef when calling "erlang:length/2"` | `error: not a function when calling "Math.PI/1"` |
 | Exception while executing | `error: badarg when calling "erlang:length/1"` | `SyntaxError: … when calling "JSON.parse/1"` |
 | throw / exit | `throw: oops when calling "erlang:throw/1"` / `exit: bye …` | - |
-| Type mismatch (`apply_typed`) | `erlang:is_atom/1 returned false (type boolean), expected type int` | `console.log/1 returned undefined (type undefined), expected type int` |
-| Guard value hit (`apply_guard`) | `erlang:is_atom/1 returned false (guard error value)` | `console.log/1 returned undefined (guard error value)` |
+| Type mismatch (`guard_type`) | `erlang:is_atom/1 returned false (type boolean), expected type int` | `console.log/1 returned undefined (type undefined), expected type int` |
+| Guard value hit (`guard_not`) | `erlang:is_atom/1 returned false (guard error value)` | `console.log/1 returned undefined (guard error value)` |
 | Args not a tuple | `args "oops" must be tuple type` | same as left |
 
 ## Development

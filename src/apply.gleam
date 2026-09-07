@@ -1,8 +1,8 @@
 //// Cross-runtime dynamic function invocation for Erlang and JavaScript.
 ////
 //// Resolve functions by string path in the target runtime and call them:
-//// `apply_typed` enforces a return type via a `default` anchor,
-//// `apply_guard` treats a specific value as failure. Error messages share a
+//// `guard_type` enforces a return type via a `default` anchor,
+//// `guard_not` treats a specific value as failure. Error messages share a
 //// unified `path/arity + reason` style on both targets.
 
 ///
@@ -73,13 +73,13 @@ fn try_apply_guard(
 @external(javascript, "./jst_ffi.mjs", "unwrap")
 pub fn unwrap(value: any, default: a) -> a
 
-/// Value-anchor check for a dynamic value — the value-level `apply_guard`.
+/// Value-anchor check for a dynamic value — the value-level `guard_not`.
 ///
 /// If `value` is **not** the `error_value`, returns `Ok(value)` (any type);
 /// if it **equals** `error_value`, returns `Error(error_value)`.
 ///
 /// Unlike `unwrap` (which compares *types* and falls back), this compares
-/// *values* and reports the match as an error. Unlike `apply_guard` (which
+/// *values* and reports the match as an error. Unlike `guard_not` (which
 /// resolves and calls a path), this just checks a value you already hold.
 ///
 /// ```gleam
@@ -107,16 +107,16 @@ pub fn unwrap_not(value: any, error_value: a) -> Result(any, a)
 ///
 ///
 /// ```gleam
-/// apply.apply_typed("erlang:length", #([1, 2, 3]), 0) // Ok(3)  (Int)
-/// apply.apply_typed("Math.max", #(1, 5), 0)           // Ok(5)  (Int)
-/// apply.apply_typed("erlang:is_atom", #(1), 0)
+/// apply.guard_type("erlang:length", #([1, 2, 3]), 0) // Ok(3)  (Int)
+/// apply.guard_type("Math.max", #(1, 5), 0)           // Ok(5)  (Int)
+/// apply.guard_type("erlang:is_atom", #(1), 0)
 /// // Error("erlang:is_atom/1 returned false (type boolean), expected type int")
 /// ```
 ///
 /// The type judgement rules are shared with `unwrap/2` (see there). If you
 /// only care about *which value* the function uses as its failure signal (not
-/// its type), use `apply_guard` instead.
-pub fn apply_typed(
+/// its type), use `guard_not` instead.
+pub fn guard_type(
   raw_path: String,
   args: args_tuple,
   default: a,
@@ -131,7 +131,8 @@ pub fn apply_typed(
 
 /// Dynamically invoke a runtime function, treating a specific value as failure.
 ///
-/// - `raw_path`, `args`: same as `apply_typed`.
+/// - `raw_path`: `"Module:Function"` on Erlang, `"object.property"` on JavaScript.
+/// - `args`: must be a tuple; elements are spread as call arguments in order.
 /// - `error_value`: the exact value the function uses to signal failure — JS
 ///   `undefined`/`null`, Erlang `false`/`nil`/`{error, _}`, `-1`, `""`, ...
 ///
@@ -143,20 +144,20 @@ pub fn apply_typed(
 ///   result **equals** `error_value`
 ///
 /// This checks *values*, not types — the result comes back as `any`. Use
-/// `apply_typed` when you need a type guarantee instead.
+/// `guard_type` when you need a type guarantee instead.
 ///
 /// Passing `Nil` as `error_value` is the natural way to fetch **platform-local
 /// values** (Erlang references, JavaScript objects): anything except `nil`/
 /// `undefined` comes back as `Ok`, so no type signature is bent:
 ///
 /// ```gleam
-/// let assert Ok(ref) = apply.apply_guard("erlang:make_ref", #(), Nil)
-/// let assert Ok(True) = apply.apply_typed("erlang:is_reference", #(ref), False)
+/// let assert Ok(ref) = apply.guard_not("erlang:make_ref", #(), Nil)
+/// let assert Ok(True) = apply.guard_type("erlang:is_reference", #(ref), False)
 ///
-/// let assert Error(msg) = apply.apply_guard("erlang:is_atom", #(1), False)
+/// let assert Error(msg) = apply.guard_not("erlang:is_atom", #(1), False)
 /// // msg == "erlang:is_atom/1 returned false (guard error value)"
 /// ```
-pub fn apply_guard(
+pub fn guard_not(
   raw_path: String,
   args: args_tuple,
   error_value: a,

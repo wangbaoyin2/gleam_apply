@@ -46,32 +46,32 @@ pub fn is_function_true_for_functions_test() {
 // ---- apply ----
 pub fn apply_math_max_test() {
   on_javascript(fn() {
-    let assert Ok(5) = apply.apply_typed("Math.max", #(1, 5), 0)
+    let assert Ok(5) = apply.guard_type("Math.max", #(1, 5), 0)
   })
 }
 
 pub fn apply_math_max_three_args_test() {
   on_javascript(fn() {
-    let assert Ok(10) = apply.apply_typed("Math.max", #(10, 2, 8), 0)
+    let assert Ok(10) = apply.guard_type("Math.max", #(10, 2, 8), 0)
   })
 }
 
 pub fn apply_math_abs_test() {
   on_javascript(fn() {
-    let assert Ok(5) = apply.apply_typed("Math.abs", #(-5), 0)
+    let assert Ok(5) = apply.guard_type("Math.abs", #(-5), 0)
   })
 }
 
 pub fn apply_json_stringify_test() {
   on_javascript(fn() {
-    let assert Ok("123") = apply.apply_typed("JSON.stringify", #(123), "")
+    let assert Ok("123") = apply.guard_type("JSON.stringify", #(123), "")
   })
 }
 
 pub fn apply_console_log_type_mismatch_error_test() {
   on_javascript(fn() {
     // console.log 返回 undefined，default 0（number）→ 类型不匹配
-    let assert Error(msg) = apply.apply_typed("console.log", #(1), 0)
+    let assert Error(msg) = apply.guard_type("console.log", #(1), 0)
     assert msg
       == "console.log/1 returned undefined (type undefined), expected type int"
   })
@@ -79,21 +79,21 @@ pub fn apply_console_log_type_mismatch_error_test() {
 
 pub fn apply_non_function_error_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("Math.PI", #(1), 0)
+    let assert Error(msg) = apply.guard_type("Math.PI", #(1), 0)
     assert msg == "error: not a function when calling \"Math.PI/1\""
   })
 }
 
 pub fn apply_non_tuple_args_error_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("Math.max", "oops", 0)
+    let assert Error(msg) = apply.guard_type("Math.max", "oops", 0)
     assert msg == "args \"oops\" must be tuple type"
   })
 }
 
 pub fn apply_missing_path_returns_error_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("not.exist.path", #(1, 2), 0)
+    let assert Error(msg) = apply.guard_type("not.exist.path", #(1, 2), 0)
     assert msg
       == "not.exist.path/2 not found in javascript (object or property does not exist)"
   })
@@ -102,7 +102,7 @@ pub fn apply_missing_path_returns_error_test() {
 // ---- runtime errors ----
 pub fn apply_runtime_exception_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("JSON.parse", #("not json"), "")
+    let assert Error(msg) = apply.guard_type("JSON.parse", #("not json"), "")
     //echo msg
     // JS exception thrown while executing: includes the exception type and call target
     assert string.contains(msg, "SyntaxError")
@@ -112,7 +112,7 @@ pub fn apply_runtime_exception_test() {
 
 pub fn apply_missing_last_part_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("Math.notExist", #(1), 0)
+    let assert Error(msg) = apply.guard_type("Math.notExist", #(1), 0)
     assert msg
       == "Math.notExist/1 not found in javascript (object or property does not exist)"
   })
@@ -120,14 +120,14 @@ pub fn apply_missing_last_part_test() {
 
 pub fn apply_bad_path_empty_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("", #(1), 0)
+    let assert Error(msg) = apply.guard_type("", #(1), 0)
     assert msg == "bad path: \"\", expected \"object.property\""
   })
 }
 
 pub fn apply_bad_path_empty_segment_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply_typed("a..b", #(1), 0)
+    let assert Error(msg) = apply.guard_type("a..b", #(1), 0)
     assert msg == "bad path: \"a..b\", expected \"object.property\""
   })
 }
@@ -194,26 +194,26 @@ pub fn unwrap_returns_default_on_type_mismatch_test() {
 }
 
 // ---- Nil default = 逃生舱：不做类型验证，返回任意值 ----
-pub fn apply_guard_nil_returns_platform_local_test() {
+pub fn guard_not_nil_returns_platform_local_test() {
   on_javascript(fn() {
-    // apply_guard 的 error_value 传 Nil（undefined）：JSON.parse 返回 JS 对象 → Ok
-    let assert Ok(obj) = apply.apply_guard("JSON.parse", #("{\"a\":1}"), Nil)
-    let assert Ok("{\"a\":1}") = apply.apply_typed("JSON.stringify", #(obj), "")
+    // guard_not 的 error_value 传 Nil（undefined）：JSON.parse 返回 JS 对象 → Ok
+    let assert Ok(obj) = apply.guard_not("JSON.parse", #("{\"a\":1}"), Nil)
+    let assert Ok("{\"a\":1}") = apply.guard_type("JSON.stringify", #(obj), "")
   })
 }
 
-pub fn apply_guard_console_log_nil_hit_test() {
+pub fn guard_not_console_log_nil_hit_test() {
   on_javascript(fn() {
     // console.log 返回 undefined == error_value Nil → Error
-    let assert Error(msg) = apply.apply_guard("console.log", #(1), Nil)
+    let assert Error(msg) = apply.guard_not("console.log", #(1), Nil)
     assert msg == "console.log/1 returned undefined (guard error value)"
   })
 }
 
-pub fn apply_guard_miss_ok_test() {
+pub fn guard_not_miss_ok_test() {
   on_javascript(fn() {
     // error_value Nil，Math.max 返回 5 ≠ undefined → Ok(5)
-    let assert Ok(5) = apply.apply_guard("Math.max", #(1, 5), Nil)
+    let assert Ok(5) = apply.guard_not("Math.max", #(1, 5), Nil)
   })
 }
 
