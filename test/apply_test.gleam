@@ -46,51 +46,53 @@ pub fn is_function_true_for_functions_test() {
 // ---- apply ----
 pub fn apply_math_max_test() {
   on_javascript(fn() {
-    let assert Ok(5) = apply.apply("Math.max", #(1, 5))
+    let assert Ok(5) = apply.apply("Math.max", #(1, 5), 0)
   })
 }
 
 pub fn apply_math_max_three_args_test() {
   on_javascript(fn() {
-    let assert Ok(10) = apply.apply("Math.max", #(10, 2, 8))
+    let assert Ok(10) = apply.apply("Math.max", #(10, 2, 8), 0)
   })
 }
 
 pub fn apply_math_abs_test() {
   on_javascript(fn() {
-    let assert Ok(5) = apply.apply("Math.abs", #(-5))
+    let assert Ok(5) = apply.apply("Math.abs", #(-5), 0)
   })
 }
 
 pub fn apply_json_stringify_test() {
   on_javascript(fn() {
-    let assert Ok("123") = apply.apply("JSON.stringify", #(123))
+    let assert Ok("123") = apply.apply("JSON.stringify", #(123), "")
   })
 }
 
-pub fn apply_console_log_returns_nil_test() {
+pub fn apply_console_log_type_mismatch_error_test() {
   on_javascript(fn() {
-    let assert Ok(Nil) = apply.apply("console.log", #(1))
+    // console.log 返回 undefined，default 0（number）→ 类型不匹配
+    let assert Error(msg) = apply.apply("console.log", #(1), 0)
+    assert msg == "console.log/1 returned undefined (type undefined), expected type int"
   })
 }
 
 pub fn apply_non_function_error_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("Math.PI", #(1))
+    let assert Error(msg) = apply.apply("Math.PI", #(1), 0)
     assert msg == "error: not a function when calling \"Math.PI/1\""
   })
 }
 
 pub fn apply_non_tuple_args_error_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("Math.max", "oops")
+    let assert Error(msg) = apply.apply("Math.max", "oops", 0)
     assert msg == "args \"oops\" must be tuple type"
   })
 }
 
 pub fn apply_missing_path_returns_error_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("not.exist.path", #(1, 2))
+    let assert Error(msg) = apply.apply("not.exist.path", #(1, 2), 0)
     assert msg
       == "not.exist.path/2 not found in javascript (object or property does not exist)"
   })
@@ -99,7 +101,7 @@ pub fn apply_missing_path_returns_error_test() {
 // ---- runtime errors ----
 pub fn apply_runtime_exception_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("JSON.parse", #("not json"))
+    let assert Error(msg) = apply.apply("JSON.parse", #("not json"), "")
     //echo msg
     // JS exception thrown while executing: includes the exception type and call target
     assert string.contains(msg, "SyntaxError")
@@ -109,7 +111,7 @@ pub fn apply_runtime_exception_test() {
 
 pub fn apply_missing_last_part_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("Math.notExist", #(1))
+    let assert Error(msg) = apply.apply("Math.notExist", #(1), 0)
     assert msg
       == "Math.notExist/1 not found in javascript (object or property does not exist)"
   })
@@ -117,14 +119,14 @@ pub fn apply_missing_last_part_test() {
 
 pub fn apply_bad_path_empty_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("", #(1))
+    let assert Error(msg) = apply.apply("", #(1), 0)
     assert msg == "bad path: \"\", expected \"object.property\""
   })
 }
 
 pub fn apply_bad_path_empty_segment_test() {
   on_javascript(fn() {
-    let assert Error(msg) = apply.apply("a..b", #(1))
+    let assert Error(msg) = apply.apply("a..b", #(1), 0)
     assert msg == "bad path: \"a..b\", expected \"object.property\""
   })
 }
@@ -169,6 +171,24 @@ pub fn get_js_obj_missing_middle_part_test() {
     let assert Error(msg) = apply.get_js_obj("not.exist.path")
     assert msg
       == "not.exist.path not found in javascript (object or property does not exist)"
+  })
+}
+
+// ---- unwrap（类型判定 + 默认值）----
+pub fn unwrap_returns_value_when_type_matches_test() {
+  on_javascript(fn() {
+    assert apply.unwrap(5, 0) == 5
+    assert apply.unwrap("x", "") == "x"
+    assert apply.unwrap(False, False) == False
+    let assert #(1, 2) = apply.unwrap(#(1, 2), #(0, 0))
+  })
+}
+
+pub fn unwrap_returns_default_on_type_mismatch_test() {
+  on_javascript(fn() {
+    assert apply.unwrap(5, "") == ""
+    assert apply.unwrap("x", 0) == 0
+    // 注：JS 按数值判定——5.0(值为5) 算 int，5.5 算 float
   })
 }
 

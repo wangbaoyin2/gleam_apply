@@ -84,46 +84,46 @@ pub fn get_erl_func_missing_function_atom_test() {
 // ---- apply (success paths) ----
 pub fn apply_erlang_length_test() {
   on_erlang(fn() {
-    let assert Ok(3) = apply.apply("erlang:length", #([1, 2, 3]))
+    let assert Ok(3) = apply.apply("erlang:length", #([1, 2, 3]), 0)
   })
 }
 
 pub fn apply_erlang_max_test() {
   on_erlang(fn() {
-    let assert Ok(10) = apply.apply("erlang:max", #(10, 2))
+    let assert Ok(10) = apply.apply("erlang:max", #(10, 2), 0)
   })
 }
 
 pub fn apply_erlang_abs_test() {
   on_erlang(fn() {
-    let assert Ok(5) = apply.apply("erlang:abs", #(-5))
+    let assert Ok(5) = apply.apply("erlang:abs", #(-5), 0)
   })
 }
 
 pub fn apply_erlang_integer_to_binary_test() {
   on_erlang(fn() {
-    let assert Ok("123") = apply.apply("erlang:integer_to_binary", #(123))
+    let assert Ok("123") = apply.apply("erlang:integer_to_binary", #(123), "")
   })
 }
 
 pub fn apply_ok_result_maps_to_nil_test() {
   on_erlang(fn() {
     // io:format/2 returns ok; try_apply should map it to Ok(Nil)
-    let assert Ok(Nil) = apply.apply("io:format", #("", []))
+    let assert Ok(Nil) = apply.apply("io:format", #("", []), Nil)
   })
 }
 
 // ---- apply (runtime errors, mirroring the JS side) ----
 pub fn apply_non_tuple_args_error_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("erlang:length", "oops")
+    let assert Error(msg) = apply.apply("erlang:length", "oops", 0)
     assert msg == "args \"oops\" must be tuple type"
   })
 }
 
 pub fn apply_missing_module_not_found_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("not_a_module:foo", #(1))
+    let assert Error(msg) = apply.apply("not_a_module:foo", #(1), 0)
     assert msg
       == "not_a_module:foo/1 not found in erlang (module or function does not exist)"
   })
@@ -131,50 +131,109 @@ pub fn apply_missing_module_not_found_test() {
 
 pub fn apply_undef_error_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("erlang:length", #())
+    let assert Error(msg) = apply.apply("erlang:length", #(), 0)
     assert msg == "error: undef when calling \"erlang:length/0\""
   })
 }
 
 pub fn apply_arity_in_error_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("erlang:length", #(1, 2))
+    let assert Error(msg) = apply.apply("erlang:length", #(1, 2), 0)
     assert msg == "error: undef when calling \"erlang:length/2\""
   })
 }
 
 pub fn apply_bad_path_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("Math.max", #(1, 5))
+    let assert Error(msg) = apply.apply("Math.max", #(1, 5), 0)
     assert msg == "bad path: \"Math.max\", expected \"Module:Function\""
   })
 }
 
 pub fn apply_bad_path_empty_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("", #(1))
+    let assert Error(msg) = apply.apply("", #(1), 0)
     assert msg == "bad path: \"\", expected \"Module:Function\""
   })
 }
 
 pub fn apply_runtime_throw_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("erlang:throw", #("oops"))
+    let assert Error(msg) = apply.apply("erlang:throw", #("oops"), 0)
     assert msg == "throw: oops when calling \"erlang:throw/1\""
   })
 }
 
 pub fn apply_runtime_exit_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("erlang:exit", #("bye"))
+    let assert Error(msg) = apply.apply("erlang:exit", #("bye"), 0)
     assert msg == "exit: bye when calling \"erlang:exit/1\""
   })
 }
 
 pub fn apply_runtime_badarg_test() {
   on_erlang(fn() {
-    let assert Error(msg) = apply.apply("erlang:length", #(1))
+    let assert Error(msg) = apply.apply("erlang:length", #(1), 0)
     assert msg == "error: badarg when calling \"erlang:length/1\""
+  })
+}
+
+// ---- 失败哨兵归一化（FFI 契约：false / nil / {error, _} 视为失败）----
+pub fn apply_false_type_mismatch_error_test() {
+  on_erlang(fn() {
+    // is_atom(1) 返回 false（atom），default 是 0（integer）→ 类型不匹配
+    let assert Error(msg) = apply.apply("erlang:is_atom", #(1), 0)
+    assert msg == "erlang:is_atom/1 returned false (type boolean), expected type int"
+  })
+}
+
+pub fn apply_true_value_ok_test() {
+  on_erlang(fn() {
+    // member 命中返回 true，default False（同为 atom 类型）→ Ok(True)
+    let assert Ok(True) = apply.apply("lists:member", #(1, [1, 2]), False)
+  })
+}
+
+pub fn apply_false_matches_bool_default_test() {
+  on_erlang(fn() {
+    // member 未命中返回 false，default False → 类型匹配 → Ok(False)
+    let assert Ok(False) = apply.apply("lists:member", #(3, [1, 2]), False)
+  })
+}
+
+pub fn apply_float_vs_int_mismatch_test() {
+  on_erlang(fn() {
+    // max 返回 2.5（float），default 0（integer）→ 类型不匹配
+    let assert Error(msg) = apply.apply("erlang:max", #(1.5, 2.5), 0)
+    assert msg == "erlang:max/2 returned 2.5 (type float), expected type int"
+  })
+}
+
+pub fn apply_error_wrapper_type_mismatch_test() {
+  on_erlang(fn() {
+    // 函数返回 {error, einval}（tuple），default ""（binary）→ 类型不匹配
+    let assert Error(msg) = apply.apply("inet:parse_address", #("not-an-ip"), "")
+    assert msg
+      == "inet:parse_address/1 returned {error,einval} (type tuple), expected type binary"
+  })
+}
+
+// ---- unwrap（类型判定 + 默认值）----
+pub fn unwrap_returns_value_when_type_matches_test() {
+  on_erlang(fn() {
+    assert apply.unwrap(5, 0) == 5
+    assert apply.unwrap("x", "") == "x"
+    assert apply.unwrap(False, False) == False
+    let assert #(1, 2) = apply.unwrap(#(1, 2), #(0, 0))
+  })
+}
+
+pub fn unwrap_returns_default_on_type_mismatch_test() {
+  on_erlang(fn() {
+    assert apply.unwrap(5, "") == ""
+    assert apply.unwrap("x", 0) == 0
+    // Float 与 Int 在 erlang 上是不同类型 → 返回默认值
+    assert apply.unwrap(5.0, 0) == 0
   })
 }
 

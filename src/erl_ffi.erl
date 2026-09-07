@@ -3,10 +3,11 @@
 -export([
     wait_msg/2,
     wait_msg_forever/1,
-    try_apply/2,
+    try_apply/3,
     confirm_tuple/1,
     confirm_function/1,
     get/2,
+    unwrap/2,
     platform_name/0
 ]).
 
@@ -49,17 +50,21 @@ get(Raw, Arity) ->
     end.
 
 %% ============================================================================
-%% try_apply/2 - dynamic call; errors carry the actual arity (number of args)
+%% try_apply/3 - dynamic call with a type-checked default:
+%% result type matches Default -> {ok, Result}, otherwise -> {error, Msg}
 %% ============================================================================
-try_apply(Raw, Args) when is_tuple(Args) ->
+try_apply(Raw, Args, Default) when is_tuple(Args) ->
     try
         Arity = tuple_size(Args),
         case do_get(Raw) of
             {ok, {M, F}} ->
                 case apply(M, F, tuple_to_list(Args)) of
-                    ok        -> {ok, nil};
-                    {ok, Any} -> {ok, Any};
-                    Other     -> {ok, Other}
+                    ok         -> check_or_error(Raw, Arity, nil, Default);
+                    {ok, Any}  -> check_or_error(Raw, Arity, Any, Default);
+                    {error, E} -> check_or_error(Raw, Arity, {error, E}, Default);
+                    false      -> check_or_error(Raw, Arity, false, Default);
+                    nil        -> check_or_error(Raw, Arity, nil, Default);
+                    Other      -> check_or_error(Raw, Arity, Other, Default)
                 end;
             {error, ErrReason} ->
                 {error, resolve_error(Raw, Arity, ErrReason)}
@@ -69,8 +74,48 @@ try_apply(Raw, Args) when is_tuple(Args) ->
             _ = Stacktrace,
             {error, apply_error(Raw, tuple_size(Args), Class, Reason)}
     end;
-try_apply(_Raw, _Args) ->
+try_apply(_Raw, _Args, _Default) ->
     {error, <<"args must be a tuple">>}.
+
+%% Type-check the call result against Default:
+%% same type -> {ok, Value}; different -> {error, mismatch message}
+check_or_error(Raw, Arity, Value, Default) ->
+    case gleam_type(Value) =:= gleam_type(Default) of
+        true  -> {ok, Value};
+        false -> {error, type_mismatch_error(Raw, Arity, Value, Default)}
+    end.
+
+type_mismatch_error(Raw, Arity, Value, Default) ->
+    V = fmt_term(Value),
+    VT = atom_to_binary(gleam_type(Value), utf8),
+    DT = atom_to_binary(gleam_type(Default), utf8),
+    <<(label(Raw, Arity))/binary, " returned ", V/binary,
+      " (type ", VT/binary, "), expected type ", DT/binary>>.
+
+%% ============================================================================
+%% unwrap/2 - if Value has the same runtime type as Default, return Value,
+%% otherwise return Default. Pins a dynamic value to the type of Default.
+%% ============================================================================
+unwrap(Value, Default) ->
+    case gleam_type(Value) =:= gleam_type(Default) of
+        true  -> Value;
+        false -> Default
+    end.
+
+%% Normalised Gleam-level type tag (mirrored by kind/1 in jst_ffi.mjs).
+%% true/false are separated from other atoms -> boolean.
+gleam_type(true)  -> boolean;
+gleam_type(false) -> boolean;
+gleam_type(V) when is_atom(V)     -> atom;      % Nil / other atoms
+gleam_type(V) when is_binary(V)   -> binary;    % String / BitArray
+gleam_type(V) when is_integer(V)  -> int;
+gleam_type(V) when is_float(V)    -> float;
+gleam_type(V) when is_list(V)     -> list;
+gleam_type(V) when is_tuple(V)    -> tuple;
+gleam_type(V) when is_map(V)      -> map;
+gleam_type(V) when is_function(V) -> function;
+gleam_type(V) when is_pid(V)      -> pid;
+gleam_type(_)                     -> other.
 
 %% ============================================================================
 %% Error message formatting
